@@ -367,6 +367,10 @@ function drawQuad(c, L, p) {
     fillEll(c, -rx * 0.1, by - ry * 0.45, rx * 0.55, ry * 0.2, 'rgba(255,255,255,0.18)');
     ell(c, 0, by, rx, ry); c.strokeStyle = 'rgba(0,0,0,0.18)'; c.lineWidth = 1.2; c.stroke();
   }
+  if (L.mushrooms) {
+    mushroom(c, -rx * 0.45, by - ry * 0.85, ry * 0.32);
+    mushroom(c, rx * 0.1, by - ry * 0.95, ry * 0.38);
+  }
   if (!p.lying) legs(c, [[-rx * 0.55, sw], [rx * 0.55, -sw]], by, L, L.leg);
 
   // الرأس
@@ -389,6 +393,7 @@ function drawQuad(c, L, p) {
     c.beginPath(); c.moveTo(hx + 3, hy - hs * 0.5); c.quadraticCurveTo(hx - 16, hy - hs * 0.9, hx - 12, hy - hs * 1.7); c.stroke();
   }
   fillEll(c, hx + hs * 0.25, hy, hs, hs * 0.72, headC);
+  if (L.mushrooms) mushroom(c, hx - hs * 0.05, hy - hs * 0.6, hs * 0.38);
   if (L.wool) fillEll(c, hx + hs * 0.05, hy - hs * 0.6, hs * 0.55, hs * 0.35, body);
   fillEll(c, hx + hs * 0.95, hy + hs * 0.22, hs * 0.5, hs * 0.45, L.muzzle);
   fillEll(c, hx + hs * 1.12, hy + hs * 0.12, 1.3, 1.1, 'rgba(0,0,0,0.5)');
@@ -400,6 +405,19 @@ function drawQuad(c, L, p) {
     fillEll(c, hx + hs * 0.45, hy - hs * 0.18, Math.max(1.6, hs * 0.16), Math.max(1.6, hs * 0.16), '#1d1a18');
     fillEll(c, hx + hs * 0.5, hy - hs * 0.24, 0.8, 0.8, '#ffffff');
   }
+}
+
+// فطر أحمر صغير بنقاط بيضاء (لبقرة الفطر)
+function mushroom(c, x, y, r) {
+  c.fillStyle = '#f1e8d6';
+  c.fillRect(x - r * 0.28, y - r * 0.9, r * 0.56, r * 0.9);
+  c.beginPath(); c.moveTo(x - r, y - r * 0.75);
+  c.quadraticCurveTo(x, y - r * 2.1, x + r, y - r * 0.75); c.closePath();
+  c.fillStyle = '#e0302a'; c.fill();
+  c.strokeStyle = 'rgba(0,0,0,0.25)'; c.lineWidth = 0.8; c.stroke();
+  fillEll(c, x - r * 0.4, y - r * 1.05, r * 0.16, r * 0.13, '#ffffff');
+  fillEll(c, x + r * 0.3, y - r * 1.2, r * 0.18, r * 0.14, '#ffffff');
+  fillEll(c, x - r * 0.02, y - r * 1.4, r * 0.12, r * 0.1, '#ffffff');
 }
 
 function legs(c, xs, by, L, col) {

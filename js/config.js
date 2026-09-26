@@ -85,6 +85,18 @@ const ANIMALS = {
     look: { kind: 'quad', rx: 29, ry: 16, lh: 14, lw: 6, body: '#4b4747', head: '#4b4747', muzzle: '#6b6262',
       leg: '#403c3c', hoof: '#1e1b1b', horns: 'big', ear: '#3c3838', speed: 17 },
   },
+  mooshroom: {
+    name: 'بقرة الفطر', plural: 'أبقار الفطر', fem: true, icon: '🍄', space: 2, vetMult: 1.6, diseaseMult: 0.6,
+    unlock: { level: 6, cost: 4000 },
+    stages: {
+      small:  { buy: 300,  sell: 180,  feed: 2, grow: 3, size: 0.62 },
+      medium: { buy: 650,  sell: 520,  feed: 3, grow: 3, size: 0.82 },
+      large:  { buy: 1300, sell: 1150, feed: 4, grow: 0, size: 1 },
+    },
+    look: { kind: 'quad', rx: 26, ry: 15, lh: 15, lw: 5, body: '#c4302b', spots: '#ece4d8',
+      head: '#c4302b', muzzle: '#e8b0a0', leg: '#e9e1d2', hoof: '#4a3b33', horns: 'small', ear: '#a82823',
+      mushrooms: true, speed: 20 },
+  },
 };
 
 // ------------------------------------------------------------
