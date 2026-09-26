@@ -1,5 +1,5 @@
 // عامل الخدمة: يخزّن ملفات اللعبة لتعمل بدون إنترنت
-const CACHE = 'animal-farm-v1';
+const CACHE = 'animal-farm-v2';
 const FILES = [
   './', './index.html', './style.css', './manifest.webmanifest',
   './js/config.js', './js/game.js', './js/render.js', './js/ui.js', './js/main.js',
