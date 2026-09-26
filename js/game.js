@@ -64,7 +64,6 @@ function addAnimal(s, type, stage, silent) {
   const a = {
     id: s.nextId++,
     type, stage,
-    name: pick(ANIMAL_NAMES),
     stageAge: stage === 'large' ? 0 : rand(0, 0.2),
     hunger: 80,
     health: 100,
@@ -98,6 +97,7 @@ function loadGame() {
     for (const k of Object.keys(base.feed)) if (s.feed[k] === undefined) s.feed[k] = 0;
     for (const k of Object.keys(base.stats)) if (s.stats[k] === undefined) s.stats[k] = 0;
     s.animals = s.animals.filter(a => ANIMALS[a.type]);
+    s.animals.forEach(a => delete a.name);
     syncPlots(s);
     return s;
   } catch (e) {
@@ -270,14 +270,14 @@ function step(s, dt, offline) {
       if (a.disease.prog >= GAME.DISEASE_STEP_DAYS && a.disease.severity < 3) {
         a.disease.severity++;
         a.disease.prog = 0;
-        if (!offline) Bus.notify(`⚠️ حالة ${T.name} (${a.name}) تسوء! اطلب الطبيب`, 'bad');
+        if (!offline) Bus.notify(`⚠️ حالة ${animalName(a)} تسوء! اطلب الطبيب`, 'bad');
       }
     } else if (a.hunger >= 40) dh += 12;
     a.health = clamp(a.health + dh * dt, offline ? 5 : 0, 100);
 
     if (a.health < 30 && !a.warned) {
       a.warned = true;
-      if (!offline) Bus.notify(`❗ صحة ${T.name} (${a.name}) منخفضة جداً`, 'bad');
+      if (!offline) Bus.notify(`❗ صحة ${animalName(a)} منخفضة جداً`, 'bad');
     } else if (a.health > 45) a.warned = false;
 
     if (a.health <= 0) { dead.push(a); continue; }
@@ -289,7 +289,7 @@ function step(s, dt, offline) {
       if (a.stageAge >= g) {
         a.stage = NEXT_STAGE[a.stage];
         a.stageAge = 0;
-        Bus.notify(`🎉 ${T.name} (${a.name}) ${gen(T, 'أصبح', 'أصبحت')} ${animalLabel(a.type, a.stage).split(' ')[1]}` + (a.stage === 'large' ? ` — ${gen(T, 'جاهز', 'جاهزة')} للبيع!` : ''), 'good');
+        Bus.notify(`🎉 ${animalName(a)} ${gen(T, 'أصبح', 'أصبحت')} ${animalLabel(a.type, a.stage).split(' ')[1]}` + (a.stage === 'large' ? ` — ${gen(T, 'جاهز', 'جاهزة')} للبيع!` : ''), 'good');
       }
     }
 
@@ -304,7 +304,7 @@ function step(s, dt, offline) {
     removeAnimal(s, a);
     s.stats.died++;
     const T = ANIMALS[a.type];
-    Bus.notify(`💀 ${gen(T, 'نفق', 'نفقت')} ${T.name} (${a.name}) — ` + (a.disease ? 'لم يُعالج في الوقت المناسب' : 'بسبب الجوع'), 'dead');
+    Bus.notify(`💀 ${gen(T, 'نفق', 'نفقت')} ${animalName(a)} — ` + (a.disease ? 'لم يُعالج في الوقت المناسب' : 'بسبب الجوع'), 'dead');
     Bus.fx('death', a);
   }
 
@@ -333,7 +333,7 @@ function step(s, dt, offline) {
       const a = s.animals.find(x => x.id === v.animalId);
       if (a && a.disease) {
         a.disease.diagnosed = true;
-        Bus.notify(`🩺 الطبيب شخّص ${ANIMALS[a.type].name} (${a.name}): ${DISEASES[a.disease.id].name} — ${SEVERITY_NAMES[a.disease.severity]}`, 'vet');
+        Bus.notify(`🩺 الطبيب شخّص ${animalName(a)}: ${DISEASES[a.disease.id].name} — ${SEVERITY_NAMES[a.disease.severity]}`, 'vet');
         Bus.fx('vetArrived', a);
       }
     }
@@ -402,7 +402,7 @@ function infect(s, a) {
   const chosen = pickWeighted(Object.entries(DISEASES).filter(([id, D]) =>
     (!D.only || D.only.includes(a.type)) && (!D.not || !D.not.includes(a.type))));
   a.disease = { id: chosen, severity: 1, prog: 0, diagnosed: false };
-  Bus.notify(`🤒 ${ANIMALS[a.type].name} (${a.name}) ${gen(ANIMALS[a.type], 'مريض ويحتاج', 'مريضة وتحتاج')} طبيب!`, 'sick');
+  Bus.notify(`🤒 ${animalName(a)} ${gen(ANIMALS[a.type], 'مريض ويحتاج', 'مريضة وتحتاج')} طبيب!`, 'sick');
   Bus.fx('sick', a);
 }
 
@@ -441,7 +441,7 @@ function stepRaids(s, dt, offline, mods) {
       r.phase = 'inside';
       r.targetId = a.id;
       r.biteAt = s.time + GAME.RAID_BITE_DELAY;
-      Bus.notify(`🚨 ${P.the} دخل الحظيرة ويطارد ${ANIMALS[a.type].name} (${a.name})!`, 'raid');
+      Bus.notify(`🚨 ${P.the} دخل الحظيرة ويطارد ${animalName(a)}!`, 'raid');
     } else if (r.phase === 'inside') {
       let a = s.animals.find(x => x.id === r.targetId);
       if (!a) {
@@ -457,7 +457,7 @@ function stepRaids(s, dt, offline, mods) {
         s.stats.died++;
         s.stats.eaten++;
         const T = ANIMALS[a.type];
-        Bus.notify(`💀 ${P.the} افترس ${T.name} (${a.name})! قوِّ دفاعاتك`, 'dead');
+        Bus.notify(`💀 ${P.the} افترس ${animalName(a)}! قوِّ دفاعاتك`, 'dead');
         Bus.fx('death', a);
         r.phase = 'flee';
         r.until = s.time + GAME.RAID_FLEE;
@@ -554,7 +554,7 @@ function spawnBuyer(s) {
     lines,
     arrivedAt: s.time,
     leaveAt: s.time + wait,
-    look: { robe: pick(['#f4f1ea', '#d9cbb2', '#8c9aa8', '#6b7a5a', '#e7dcc6']), head: pick(['#ffffff', '#d64545', '#2d2d2d']), skin: pick(['#e0b48a', '#c99470', '#a8764f']) },
+    look: { robe: pick(['#f4f1ea', '#d9cbb2', '#8c9aa8', '#6b7a5a', '#e7dcc6']), head: pick(['#ffffff', '#d64545', '#2d2d2d']), skin: pick(['#e0b48a', '#c99470', '#a8764f']), beard: pick([null, null, '#3a2d25', '#8d8d8d']) },
   };
   s.buyers.push(b);
   Bus.notify(`🧑‍🌾 وصل ${b.name} إلى ساحة البيع ويطلب: ${linesText(lines)}`, 'buyer');
@@ -599,6 +599,9 @@ function heliLeave(s) {
 }
 
 // "بقرة كبيرة" / "خروف متوسط" حسب جنس الاسم
+// اسم الحيوان المعروض: النوع + رقمه
+function animalName(a) { return `${ANIMALS[a.type].name} رقم ${a.id}`; }
+
 function gen(T, m, f) { return T.fem ? f : m; }
 
 function animalLabel(type, stage) {
@@ -625,7 +628,7 @@ function actBuyAnimal(type, stage) {
   S.money -= price;
   const a = addAnimal(S, type, stage);
   addXp(S, 2);
-  return done(`اشتريت ${T.name} ${STAGE_NAMES[stage]} (${a.name})`);
+  return done(`اشتريت ${animalLabel(type, stage)} (رقم ${a.id})`);
 }
 
 function actUnlock(type) {
@@ -673,7 +676,7 @@ function actFeed(id) {
   if (feedTotal(S) < 0.05) return fail('المخزن فارغ! ازرع علفاً أو اشترِ من السوق');
   const used = feedOne(S, a);
   Bus.fx('feed', a);
-  return done(`أطعمت ${a.name} (${used.toFixed(1)} علف)`);
+  return done(`أطعمت ${animalName(a)} (${used.toFixed(1)} علف)`);
 }
 
 function actFeedAll() {
@@ -794,7 +797,7 @@ function actTreat(id) {
   S.stats.treated++;
   addXp(S, 5);
   Bus.fx('treated', a);
-  return done(`💊 تم علاج ${a.name} من ${name}`);
+  return done(`💊 تم علاج ${animalName(a)} من ${name}`);
 }
 
 function canFulfill(s, lines) {

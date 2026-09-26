@@ -49,7 +49,7 @@ const ANIMALS = {
       large:  { buy: 560, sell: 480, feed: 4, grow: 0,   size: 1 },
     },
     look: { kind: 'quad', rx: 26, ry: 15, lh: 15, lw: 5, body: '#f7f2e8', spots: '#3a3230',
-      head: '#f7f2e8', muzzle: '#f2b8b0', leg: '#e9e1d2', hoof: '#4a3b33', horns: 'small', ear: '#e9ddd0', speed: 22 },
+      head: '#f7f2e8', muzzle: '#f2b8b0', leg: '#e9e1d2', hoof: '#4a3b33', horns: 'small', ear: '#efe6da', earIn: '#f2b8b0', tuft: '#3a3230', udder: true, speed: 22 },
   },
   sheep: {
     name: 'خروف', plural: 'أغنام', icon: '🐑', space: 1, vetMult: 1, diseaseMult: 1.1,
@@ -60,7 +60,7 @@ const ANIMALS = {
       large:  { buy: 230, sell: 200, feed: 2,   grow: 0,   size: 1 },
     },
     look: { kind: 'quad', wool: true, rx: 19, ry: 13, lh: 10, lw: 4, body: '#fbf8f1', head: '#4a3f3a',
-      muzzle: '#5a4d47', leg: '#4a3f3a', hoof: '#2a2220', ear: '#4a3f3a', speed: 20 },
+      muzzle: '#5e514b', leg: '#4a3f3a', hoof: '#2a2220', ear: '#4a3f3a', earIn: '#c98a8a', tail: 'nub', speed: 20 },
   },
   chicken: {
     name: 'دجاجة', plural: 'دجاج', fem: true, icon: '🐔', space: 0.5, vetMult: 0.4, diseaseMult: 1.2,
@@ -81,7 +81,7 @@ const ANIMALS = {
       large:  { buy: 300, sell: 260, feed: 2,   grow: 0,   size: 1 },
     },
     look: { kind: 'quad', rx: 18, ry: 11, lh: 14, lw: 3.5, body: '#a8795a', spots: '#f1e6d8', head: '#a8795a',
-      muzzle: '#8a6048', leg: '#8e644a', hoof: '#2e2420', horns: 'back', beard: true, ear: '#8e644a', speed: 26 },
+      muzzle: '#8a6048', leg: '#8e644a', hoof: '#2e2420', horns: 'back', beard: true, ear: '#9a6e52', earIn: '#d9a58a', belly: '#f1e6d8', tail: 'up', speed: 26 },
   },
   buffalo: {
     name: 'جاموسة', plural: 'جواميس', fem: true, icon: '🐃', space: 2, vetMult: 1.8, diseaseMult: 0.8,
@@ -92,7 +92,7 @@ const ANIMALS = {
       large:  { buy: 950, sell: 820, feed: 5, grow: 0, size: 1 },
     },
     look: { kind: 'quad', rx: 29, ry: 16, lh: 14, lw: 6, body: '#4b4747', head: '#4b4747', muzzle: '#6b6262',
-      leg: '#403c3c', hoof: '#1e1b1b', horns: 'big', ear: '#3c3838', speed: 17 },
+      leg: '#403c3c', hoof: '#1e1b1b', horns: 'big', ear: '#4b4747', earIn: '#7a6f6f', tuft: '#1e1b1b', speed: 17 },
   },
   mooshroom: {
     name: 'بقرة الفطر', plural: 'أبقار الفطر', fem: true, icon: '🍄', space: 2, vetMult: 1.6, diseaseMult: 0.6,
@@ -237,7 +237,6 @@ const EVENTS = [
 ];
 
 const BUYER_NAMES = ['أبو علي', 'حجي كريم', 'أم محمد', 'سالم', 'أبو حسين', 'جاسم', 'أم زينب', 'حمزة', 'أبو مصطفى', 'عباس', 'ستار', 'أبو يوسف', 'نوري', 'حيدر', 'أم عباس'];
-const ANIMAL_NAMES = ['زهرة', 'لولو', 'نجمة', 'سكّر', 'قمر', 'بندق', 'فلّة', 'غيمة', 'عسل', 'ريحانة', 'ظريف', 'نمر', 'فستق', 'شمسة', 'كرملة', 'بسبوسة', 'مرجان', 'لؤلؤة', 'ياسمين', 'توتة'];
 
 // الخبرة المطلوبة للمستوى التالي
 function xpForLevel(level) { return Math.round(80 * Math.pow(level, 1.5)); }

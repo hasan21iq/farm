@@ -109,7 +109,7 @@ PANELS.animals = {
         h += `<div class="card animal ${a.disease ? 'sick' : ''}" data-act="animal" data-a="${a.id}">
           <canvas class="portrait" data-portrait="${a.type}|${a.stage}|${a.disease ? 1 : 0}"></canvas>
           <div class="meta">
-            <div class="name">${esc(a.name)} ${a.disease ? '🤒' : a.stage === 'large' ? '✅' : ''}</div>
+            <div class="name">${animalName(a)} ${a.disease ? '🤒' : a.stage === 'large' ? '✅' : ''}</div>
             <div class="sub">${T.name} · ${STAGE_NAMES[a.stage]}</div>
             <div class="mini"><span>❤️</span>${bar(a.health)}</div>
             <div class="mini"><span>🌾</span>${bar(a.hunger)}</div>
@@ -153,7 +153,7 @@ PANELS.animals = {
 PANELS.animal = {
   title: () => {
     const a = S.animals.find(x => x.id === UI.param);
-    return a ? `${ANIMALS[a.type].icon} ${esc(a.name)}` : 'الحيوان';
+    return a ? `${ANIMALS[a.type].icon} ${animalName(a)}` : 'الحيوان';
   },
   render() {
     const a = S.animals.find(x => x.id === UI.param);
@@ -311,7 +311,7 @@ PANELS.sale = {
         const confirming = UI.confirm === `sell-${a.id}`;
         h += `<div class="shop-row">
           <canvas class="portrait sm" data-portrait="${a.type}|${a.stage}|${a.disease ? 1 : 0}"></canvas>
-          <div class="meta"><b>${esc(a.name)}</b><small>${animalLabel(a.type, a.stage)} · صحة ${Math.round(a.health)}%</small></div>
+          <div class="meta"><b>${animalName(a)}</b><small>${animalLabel(a.type, a.stage)} · صحة ${Math.round(a.health)}%</small></div>
           ${btn(confirming ? 'تأكيد؟' : `${money(p)}💰`, 'sellTrader', a.id, '', confirming ? 'orange' : 'gold')}
         </div>`;
       }
@@ -404,7 +404,7 @@ PANELS.vet = {
       h += `<div class="shop-row sick">
         <canvas class="portrait sm" data-portrait="${a.type}|${a.stage}|1"></canvas>
         <div class="meta">
-          <b>${esc(a.name)} <small>(${animalLabel(a.type, a.stage)})</small></b>
+          <b>${animalName(a)} <small>(${animalLabel(a.type, a.stage)})</small></b>
           <small>${a.disease.diagnosed ? `${DISEASES[a.disease.id].name} · ${SEVERITY_NAMES[a.disease.severity]}` : 'مرض غير معروف — يحتاج فحص'}</small>
           <div class="mini"><span>❤️</span>${bar(a.health)}</div>
         </div>
