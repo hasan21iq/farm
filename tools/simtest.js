@@ -17,9 +17,10 @@ vm.runInContext(`
       for (const a of S.animals) if (a.disease) { a.disease.diagnosed ? actTreat(a.id) : actCallVet(a.id); }
       for (const b of [...S.buyers]) actSellBuyer(b.id);
       if (S.ship.state === 'docked') S.ship.lines.forEach((l, j) => actShipDeliver(j));
+      if (S.heli.state === 'landed') actSellHeli();
       if (S.money > 300 && spaceUsed(S) + 1 <= barnCapacity(S)) actBuyAnimal('sheep', 'small');
       if (S.money > 500 && spaceUsed(S) + 2 <= barnCapacity(S)) actBuyAnimal('cow', 'small');
-      for (const k of ['fields', 'barn', 'storage', 'saleyard']) { const U = UPGRADES[k]; const n = U.levels[S.upgrades[k] + 1]; if (n && S.money > n.cost * 1.5) actUpgrade(k); }
+      for (const k of ['fields', 'barn', 'storage', 'saleyard', 'helipad']) { const U = UPGRADES[k]; const n = U.levels[S.upgrades[k] + 1]; if (n && S.money > n.cost * 1.5) actUpgrade(k); }
     }
     if (i % 300 === 299) console.log('day', dayNumber(S), 'money', Math.round(S.money), 'lvl', S.level, 'animals', S.animals.length, 'feed', Math.round(feedTotal(S)), 'up', JSON.stringify(S.upgrades));
   }
