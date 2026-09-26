@@ -66,6 +66,24 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 }
 #event.show { display: block; }
 
+/* ---------- تنبيه هجوم المفترسات ---------- */
+#raid {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + var(--safe-b)); z-index: 29;
+  width: min(92vw, 420px); display: none; align-items: center; gap: 8px;
+  background: rgba(120, 20, 15, 0.94); color: #fff; border: 2px solid #ff8a7a; border-radius: 16px;
+  padding: 8px 10px; font-size: 14px; font-weight: bold; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35); animation: raidPulse 0.9s infinite;
+}
+#raid.show { display: flex; }
+#raid .txt { flex: 1; line-height: 1.4; }
+#raid .fc {
+  flex-shrink: 0; border: none; border-radius: 12px; padding: 7px 10px; font-weight: bold; font-size: 13px;
+  background: #ffd84a; color: #5a2a00; box-shadow: 0 3px 0 #b8860b;
+}
+#raid .fc:disabled { opacity: 0.5; }
+#raid .fc:active { transform: translateY(2px); box-shadow: 0 1px 0 #b8860b; }
+@keyframes raidPulse { 50% { border-color: #ffd84a; } }
+
 /* ---------- الإشعارات ---------- */
 #toasts {
   position: fixed; top: calc(92px + var(--safe-t)); left: 50%; transform: translateX(-50%);

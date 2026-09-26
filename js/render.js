@@ -9,6 +9,7 @@ const View = {
   canvas: null, ctx: null, dpr: 1, w: 0, h: 0,
   cam: { x: 440, y: 440, zoom: 0.8 },
   actors: new Map(),
+  preds: new Map(), dogs: [],
   floaters: [], particles: [],
   t: 0, bg: null, bgKey: '', selected: null,
   clouds: [],
@@ -156,7 +157,7 @@ function buildBackground(s) {
   c.fillStyle = '#b9cc7c'; c.fill();
   for (let i = 0; i < P.w * P.h / 700; i++) fillEll(c, P.x + 8 + R() * (P.w - 16), P.y + 8 + R() * (P.h - 16), 3, 1.6, 'rgba(140,120,60,0.25)');
   // السياج
-  fence(c, P.x, P.y, P.w, P.h, { gate: 'right' });
+  fence(c, P.x, P.y, P.w, P.h, { gate: 'right', level: s.upgrades.fence });
 
   // ساحة البيع
   const Y = L.saleyard;
@@ -209,18 +210,34 @@ function buildBackground(s) {
 }
 function pick2(R, arr) { return arr[Math.floor(R() * arr.length)]; }
 
+// level: 0 خشب | 1 + شبك معدني | 2 + قاعدة حجرية | 3 + أعمدة حديد
 function fence(c, x, y, w, h, opt) {
-  c.strokeStyle = '#8a5d36'; c.lineWidth = 4; c.lineCap = 'round';
+  const lvl = opt.level || 0;
   const gateY = y + h * 0.5;
-  const rails = (x1, y1, x2, y2) => {
-    for (const off of [-10, -2]) { c.beginPath(); c.moveTo(x1, y1 + off); c.lineTo(x2, y2 + off); c.stroke(); }
+  const segs = [[x, y, x + w, y], [x, y + h, x + w, y + h]];
+  if (opt.gate === 'right') segs.push([x, y, x, y + h], [x + w, y, x + w, gateY - 22], [x + w, gateY + 22, x + w, y + h]);
+  else segs.push([x + w, y, x + w, y + h], [x, y, x, gateY - 22], [x, gateY + 22, x, y + h]);
+  const along = (step, fn) => {
+    for (const [x1, y1, x2, y2] of segs) {
+      const n = Math.max(1, Math.round(Math.hypot(x2 - x1, y2 - y1) / step));
+      for (let i = 0; i <= n; i++) fn(x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n, i);
+    }
   };
-  rails(x, y, x + w, y);
-  rails(x, y + h, x + w, y + h);
-  if (opt.gate === 'right') { rails(x, y, x, y + h); rails(x + w, y, x + w, gateY - 22); rails(x + w, gateY + 22, x + w, y + h); }
-  else { rails(x + w, y, x + w, y + h); rails(x, y, x, gateY - 22); rails(x, gateY + 22, x, y + h); }
-  c.fillStyle = '#6f4527';
-  const post = (px, py) => { c.fillRect(px - 3, py - 16, 6, 18); };
+  if (lvl >= 2) along(11, (px, py, i) => fillEll(c, px, py - 1, 7, 5, i % 2 ? '#9a9890' : '#b8b5ab'));
+  c.strokeStyle = '#8a5d36'; c.lineWidth = 4; c.lineCap = 'round';
+  for (const [x1, y1, x2, y2] of segs) {
+    for (const off of [-10, -2]) { c.beginPath(); c.moveTo(x1, y1 + off); c.lineTo(x2, y2 + off); c.stroke(); }
+  }
+  if (lvl >= 1) {
+    c.strokeStyle = 'rgba(110,120,130,0.75)'; c.lineWidth = 1.2;
+    c.beginPath();
+    along(7, (px, py) => { c.moveTo(px, py - 22); c.lineTo(px, py - 2); });
+    for (const [x1, y1, x2, y2] of segs) { c.moveTo(x1, y1 - 22); c.lineTo(x2, y2 - 22); }
+    c.stroke();
+  }
+  c.fillStyle = lvl >= 3 ? '#4a4f55' : '#6f4527';
+  const ph = lvl >= 1 ? 24 : 16;
+  const post = (px, py) => { c.fillRect(px - 3, py - ph, 6, ph + 2); };
   for (let px = x; px <= x + w; px += 40) { post(px, y); post(px, y + h); }
   for (let py = y; py <= y + h; py += 40) { post(x, py); post(x + w, py); }
 }
@@ -568,20 +585,29 @@ function syncActors(s, L) {
 }
 
 function updateActors(s, L, dt, night) {
+  const threats = s.raids.filter(r => r.phase === 'inside').map(r => View.preds.get(r.id)).filter(Boolean);
   for (const a of s.animals) {
     const act = View.actors.get(a.id);
     if (!act) continue;
     act.pop = Math.min(1, act.pop + dt * 3);
     // إبقاء الحيوان داخل الحظيرة إذا تغيّر حجمها
     if (!inRect(act.x, act.y, L.pen, -10)) { const p = randomPenPoint(L); act.x = p.x; act.y = p.y; act.state = 'idle'; }
-    if (night) { act.state = 'sleep'; act.moving = false; continue; }
+    // الهروب من المفترس
+    const th = threats.find(p => Math.hypot(p.x - act.x, p.y - act.y) < 110);
+    if (th && act.state !== 'run') {
+      const d = Math.hypot(act.x - th.x, act.y - th.y) || 1;
+      act.tx = clamp(act.x + (act.x - th.x) / d * 100, L.pen.x + 25, L.pen.x + L.pen.w - 25);
+      act.ty = clamp(act.y + (act.y - th.y) / d * 100, L.pen.y + 30, L.pen.y + L.pen.h - 18);
+      act.state = 'run';
+    }
+    if (night && !th && act.state !== 'run') { act.state = 'sleep'; act.moving = false; continue; }
     if (act.state === 'sleep') { act.state = 'idle'; act.timer = rand(0, 2); }
     const T = ANIMALS[a.type];
-    let speed = T.look.speed * (a.disease ? 0.45 : 1) * (a.hunger < 20 ? 0.6 : 1);
-    if (act.state === 'walk') {
+    let speed = T.look.speed * (a.disease ? 0.45 : 1) * (a.hunger < 20 ? 0.6 : 1) * (act.state === 'run' ? 2.4 : 1);
+    if (act.state === 'walk' || act.state === 'run') {
       const dx = act.tx - act.x, dy = act.ty - act.y;
       const d = Math.hypot(dx, dy);
-      if (d < 2) { act.state = Math.random() < 0.55 ? 'graze' : 'idle'; act.timer = rand(1.5, 5); act.moving = false; }
+      if (d < 2) { act.state = act.state === 'run' || Math.random() >= 0.55 ? 'idle' : 'graze'; act.timer = rand(1.5, 5); act.moving = false; }
       else {
         const m = Math.min(d, speed * dt);
         act.x += dx / d * m; act.y += dy / d * m;
@@ -600,6 +626,148 @@ function updateActors(s, L, dt, night) {
       }
     }
   }
+}
+
+// ------------------------------------------------------------
+//  الحيوانات المفترسة وكلاب الحراسة
+// ------------------------------------------------------------
+// المفترس يخرج من الأشجار غرب المزرعة نحو نقطة على سياج الحظيرة
+function raidPath(L, r) {
+  const y = L.pen.y + 50 + r.seed * (L.pen.h - 80);
+  return { from: { x: -50, y: y + (r.seed - 0.5) * 240 }, fence: { x: L.pen.x - 18, y } };
+}
+
+// تحريك ممثل نحو هدف، يعيد المسافة المتبقية
+function moveToward(p, tx, ty, speed, dt) {
+  const dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy);
+  if (d < 1.5) { p.moving = false; return d; }
+  const m = Math.min(d, speed * dt);
+  p.x += dx / d * m; p.y += dy / d * m;
+  if (Math.abs(dx) > 1) p.facing = dx > 0 ? 1 : -1;
+  p.phase += dt * Math.max(speed, 20) * 0.45;
+  p.moving = true;
+  return d;
+}
+
+function updatePredators(s, L, dt) {
+  const ids = new Set();
+  for (const r of s.raids) {
+    ids.add(r.id);
+    const path = raidPath(L, r);
+    let p = View.preds.get(r.id);
+    if (!p) { p = { x: path.from.x, y: path.from.y, facing: 1, phase: 0, moving: false, hit: 0 }; View.preds.set(r.id, p); }
+    p.hit = Math.max(0, p.hit - dt);
+    p.attack = false; p.scratch = false;
+    if (r.phase === 'approach') {
+      const k = clamp(1 - (r.until - s.time) / GAME.RAID_APPROACH, 0, 1);
+      moveToward(p, path.from.x + (path.fence.x - path.from.x) * k, path.from.y + (path.fence.y - path.from.y) * k, 300, dt);
+    } else if (r.phase === 'fence') {
+      p.scratch = moveToward(p, path.fence.x, path.fence.y, 60, dt) < 3;
+      if (p.scratch) p.facing = 1;
+    } else if (r.phase === 'inside') {
+      const act = View.actors.get(r.targetId);
+      if (act) {
+        const side = p.x < act.x ? -1 : 1;
+        p.attack = moveToward(p, act.x + side * 22, act.y + 2, 95, dt) < 6;
+        if (p.attack) p.facing = -side;
+      }
+    } else {
+      moveToward(p, path.from.x, path.from.y, 140, dt);
+    }
+  }
+  for (const id of [...View.preds.keys()]) if (!ids.has(id)) View.preds.delete(id);
+}
+
+function dogHome(L, i) { return { x: L.barn.x + L.barn.w + 34 + i * 30, y: L.barn.y + L.barn.h + 16 }; }
+
+function updateDogs(s, L, dt, night) {
+  const n = s.upgrades.dog >= 3 ? 2 : s.upgrades.dog >= 1 ? 1 : 0;
+  while (View.dogs.length < n) { const h = dogHome(L, View.dogs.length); View.dogs.push({ x: h.x, y: h.y, facing: 1, phase: 0, moving: false, timer: 0, tx: h.x, ty: h.y, bark: false }); }
+  View.dogs.length = n;
+  const targets = s.raids.filter(r => r.phase === 'fence' || r.phase === 'inside').map(r => View.preds.get(r.id)).filter(Boolean);
+  View.dogs.forEach((d, i) => {
+    d.bark = false;
+    if (!inRect(d.x, d.y, L.pen, -6)) { const h = dogHome(L, i); d.x = h.x; d.y = h.y; }
+    const pr = targets[i % Math.max(1, targets.length)];
+    if (pr) {
+      // الكلب يبقى داخل الحظيرة ويهاجم المفترس من خلف السياج أو داخلها
+      const tx = clamp(pr.x + (i ? 14 : -14), L.pen.x + 14, L.pen.x + L.pen.w - 14);
+      const ty = clamp(pr.y + (i ? 10 : 0), L.pen.y + 24, L.pen.y + L.pen.h - 10);
+      d.bark = moveToward(d, tx, ty, 120, dt) < 30;
+      if (d.bark) d.facing = pr.x > d.x ? 1 : -1;
+      d.lying = false;
+      d.timer = 0;
+      return;
+    }
+    if (night) {
+      const h = dogHome(L, i);
+      moveToward(d, h.x, h.y, 40, dt);
+      d.lying = !d.moving;
+      return;
+    }
+    d.lying = false;
+    d.timer -= dt;
+    if (d.timer <= 0) {
+      const h = dogHome(L, i);
+      d.tx = clamp(h.x + rand(-60, 30), L.pen.x + 20, L.pen.x + L.pen.w - 20);
+      d.ty = clamp(h.y + rand(-10, 60), L.pen.y + 30, L.pen.y + L.pen.h - 18);
+      d.timer = rand(3, 7);
+    }
+    moveToward(d, d.tx, d.ty, 35, dt);
+  });
+}
+
+function drawPredator(c, r, p, t) {
+  const P = PREDATORS[r.type];
+  const active = r.phase !== 'flee';
+  const jig = p.scratch ? Math.sin(t * 28) * 1.8 : p.hit > 0 ? Math.sin(t * 60) * 3 : 0;
+  c.save();
+  c.translate(p.x + jig, p.y);
+  if (active) {
+    ell(c, 0, 2, 30 * P.size, 10 * P.size);
+    c.strokeStyle = `rgba(230,60,50,${0.55 + 0.35 * Math.sin(t * 8)})`; c.lineWidth = 3; c.stroke();
+  }
+  c.scale(p.facing * P.size, P.size);
+  drawQuad(c, P.look, { phase: p.phase, moving: p.moving, t, seed: r.seed * 10, sick: false, graze: p.attack && Math.sin(t * 10) > 0, lying: false });
+  c.restore();
+  if (!active) return;
+  // شريط قوة المفترس
+  const w = 38, x = p.x - w / 2, y = p.y - (P.look.lh + P.look.ry * 2 + 20) * P.size;
+  rr(c, x, y, w, 6, 3); c.fillStyle = 'rgba(0,0,0,0.45)'; c.fill();
+  rr(c, x, y, w * clamp(r.hp / P.hp, 0, 1), 6, 3); c.fillStyle = '#e0443a'; c.fill();
+  const b = Math.sin(t * 6) * 2;
+  c.font = '16px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText('👆', p.x + 22, y - 6 + b);
+}
+
+function drawDog(c, d, t, night) {
+  c.save();
+  c.translate(d.x, d.y);
+  c.scale(d.facing * 0.9, 0.9);
+  drawQuad(c, DOG_LOOK, { phase: d.phase, moving: d.moving, t, seed: 3, sick: false, graze: false, lying: d.lying, night });
+  c.restore();
+  if (d.bark && Math.sin(t * 9) > 0) {
+    c.font = 'bold 13px Tahoma, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.5)'; c.strokeText('هاو!', d.x, d.y - 38);
+    c.fillStyle = '#fff'; c.fillText('هاو!', d.x, d.y - 38);
+  }
+}
+
+// أعمدة الإنارة حول الحظيرة (الجهة الغربية أولاً لأن المفترسات تأتي منها)
+function lampSpots(s, L) {
+  const lv = s.upgrades.lights, P = L.pen;
+  if (!lv) return [];
+  const spots = [[P.x - 6, P.y + 14], [P.x - 6, P.y + P.h - 6]];
+  if (lv >= 2) spots.push([P.x - 6, P.y + P.h / 2 + 4], [P.x + P.w / 2, P.y + P.h - 6]);
+  return spots;
+}
+
+function drawLamp(c, x, y, night) {
+  shadow(c, x, y + 1, 7, 2.5);
+  c.fillStyle = '#4a4f55'; c.fillRect(x - 2, y - 58, 4, 58);
+  c.fillRect(x - 2, y - 58, 12, 3);
+  fillEll(c, x + 9, y - 52, 5, 4, night ? '#fff4b0' : '#d8dde2');
+  c.strokeStyle = '#2e3236'; c.lineWidth = 1; ell(c, x + 9, y - 52, 5, 4); c.stroke();
 }
 
 // ------------------------------------------------------------
@@ -632,6 +800,19 @@ function handleFx(type, data) {
   else if (type === 'levelup') { Sfx.level(); }
   else if (type === 'upgrade') { View.bgKey = ''; Sfx.level(); }
   else if (type === 'spawn') { Sfx.pop(); }
+  else if (type === 'raid') { Sfx.howl(); }
+  else if (type === 'hit') {
+    const p = View.preds.get(data.id);
+    if (p) { p.hit = 0.18; floatText(p.x + rand(-10, 10), p.y - 40, '💥', '#fff'); burst(p.x, p.y - 20, 'star', 4); }
+    Sfx.hit();
+  } else if (type === 'repel') {
+    const p = View.preds.get(data.id);
+    if (p) { floatText(p.x, p.y - 50, 'هرب! 💨', '#b8ffb0'); burst(p.x, p.y - 20, 'star', 12); }
+    Sfx.good();
+  } else if (type === 'firecracker') {
+    for (const r of data) { const p = View.preds.get(r.id); if (p) { floatText(p.x, p.y - 45, '🧨💥', '#ffd84a'); burst(p.x, p.y - 20, 'coin', 16); burst(p.x, p.y - 20, 'star', 10); } }
+    Sfx.bang();
+  }
 }
 
 // ------------------------------------------------------------
@@ -649,13 +830,15 @@ function renderFrame(s, dt) {
   View.t += dt;
   const t = View.t;
   const L = layout(s);
-  const key = `${s.upgrades.barn}-${s.upgrades.fields}`;
+  const key = `${s.upgrades.barn}-${s.upgrades.fields}-${s.upgrades.fence}`;
   if (View.bgKey !== key) { View.bg = buildBackground(s); View.bgKey = key; }
   const night = isNight(s);
   const hour = hourOf(s);
 
   syncActors(s, L);
+  updatePredators(s, L, dt);
   updateActors(s, L, dt, night);
+  updateDogs(s, L, dt, night);
 
   c.setTransform(View.dpr, 0, 0, View.dpr, 0, 0);
   c.fillStyle = '#5da7d8'; c.fillRect(0, 0, View.w, View.h);
@@ -707,6 +890,13 @@ function renderFrame(s, dt) {
     const bx = L.saleyard.x + 60 + i * 72, by = L.saleyard.y + 165 + (i % 2) * 22;
     items.push({ y: by, draw: () => drawBuyer(c, s, b, bx, by, t) });
   });
+  for (const r of s.raids) {
+    const p = View.preds.get(r.id);
+    if (p) items.push({ y: p.y, draw: () => drawPredator(c, r, p, t) });
+  }
+  for (const d of View.dogs) items.push({ y: d.y, draw: () => drawDog(c, d, t, night) });
+  const lamps = lampSpots(s, L);
+  for (const [lx, ly] of lamps) items.push({ y: ly, draw: () => drawLamp(c, lx, ly, night) });
   const vet = vetPosition(s, L);
   if (vet) items.push({ y: vet.y, draw: () => { c.save(); c.translate(vet.x, vet.y); if (vet.flip) c.scale(-1, 1); drawPerson(c, { robe: '#ffffff', skin: '#e0b48a' }, t, { vet: true, walking: vet.walking }); c.restore(); } });
   items.sort((a, b) => a.y - b.y).forEach(i => i.draw());
@@ -752,10 +942,11 @@ function renderFrame(s, dt) {
     c.save(); c.translate(View.w / 2, View.h / 2); c.scale(z, z); c.translate(-View.cam.x, -View.cam.y);
     c.globalCompositeOperation = 'lighter';
     const lights = [[L.barn.x + L.barn.w / 2, L.barn.y + 22], [L.storage.x + 100, L.storage.y + 58], [L.clinic.x + 30, L.clinic.y + 48], [L.clinic.x + L.clinic.w - 30, L.clinic.y + 48], [L.saleyard.x + L.saleyard.w - 90, L.saleyard.y + 60]];
-    for (const [lx, ly] of lights) {
-      const gr = c.createRadialGradient(lx, ly, 2, lx, ly, 70);
+    const lamp = lamps.map(([lx, ly]) => [lx + 9, ly - 40, 130]);
+    for (const [lx, ly, rad = 70] of [...lights, ...lamp]) {
+      const gr = c.createRadialGradient(lx, ly, 2, lx, ly, rad);
       gr.addColorStop(0, `rgba(255,200,110,${dark * 0.7})`); gr.addColorStop(1, 'rgba(255,200,110,0)');
-      c.fillStyle = gr; c.fillRect(lx - 70, ly - 70, 140, 140);
+      c.fillStyle = gr; c.fillRect(lx - rad, ly - rad, rad * 2, rad * 2);
     }
     c.restore();
   }
@@ -925,6 +1116,14 @@ function initView(canvas) {
 function hitTest(s, x, y) {
   const L = layout(s);
   let best = null, bestD = 1e9;
+  // المفترس أولاً — مساحة لمس واسعة لتسهيل طرده على الهاتف
+  for (const r of s.raids) {
+    const p = View.preds.get(r.id);
+    if (!p || r.phase === 'flee') continue;
+    const d = Math.hypot(x - p.x, y - (p.y - 16));
+    if (d < 46 && d < bestD) { best = r; bestD = d; }
+  }
+  if (best) return { kind: 'predator', id: best.id };
   for (const a of s.animals) {
     const act = View.actors.get(a.id);
     if (!act) continue;

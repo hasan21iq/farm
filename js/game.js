@@ -30,7 +30,7 @@ function newGame() {
     nextId: 1,
     feed: { grass: 20, barley: 10, corn: 0, alfalfa: 0 },
     plots: [],
-    upgrades: { barn: 0, fields: 0, storage: 0, saleyard: 0, clinic: 0, feeder: 0, dock: 0 },
+    upgrades: { barn: 0, fields: 0, storage: 0, saleyard: 0, clinic: 0, feeder: 0, dock: 0, fence: 0, dog: 0, lights: 0 },
     unlocked: { cow: true, sheep: true },
     cleanliness: 100,
     buyers: [],
@@ -39,8 +39,10 @@ function newGame() {
     vetVisits: [],
     event: null,
     nextEventAt: GAME.FIRST_EVENT_AT,
+    raids: [],
+    nextRaidAt: GAME.FIRST_RAID_AT,
     log: [],
-    stats: { sold: 0, earned: 0, died: 0, ships: 0, buyers: 0, treated: 0 },
+    stats: { sold: 0, earned: 0, died: 0, ships: 0, buyers: 0, treated: 0, repelled: 0, eaten: 0 },
     settings: { sound: true },
     tutorialDone: false,
   };
@@ -116,7 +118,7 @@ function upLevel(s, key) { return UPGRADES[key].levels[s.upgrades[key]]; }
 function upVal(s, key) { return upLevel(s, key).v; }
 
 function eventMods(s) {
-  const m = { disease: 1, vet: 1, crop: 1, buyerPrice: 1, buyerRate: 1, feedPrice: 1 };
+  const m = { disease: 1, vet: 1, crop: 1, buyerPrice: 1, buyerRate: 1, feedPrice: 1, raid: 1 };
   if (s.event && s.time < s.event.until) {
     const ev = EVENTS.find(e => e.id === s.event.id);
     if (ev) Object.assign(m, ev.mods);
@@ -298,8 +300,7 @@ function step(s, dt, offline) {
     }
   }
   for (const a of dead) {
-    s.animals = s.animals.filter(x => x !== a);
-    s.vetVisits = s.vetVisits.filter(v => v.animalId !== a.id);
+    removeAnimal(s, a);
     s.stats.died++;
     const T = ANIMALS[a.type];
     Bus.notify(`💀 ${gen(T, 'نفق', 'نفقت')} ${T.name} (${a.name}) — ` + (a.disease ? 'لم يُعالج في الوقت المناسب' : 'بسبب الجوع'), 'dead');
@@ -321,6 +322,8 @@ function step(s, dt, offline) {
       }
     }
   }
+
+  stepRaids(s, dt, offline, mods);
 
   // زيارات الطبيب
   for (const v of [...s.vetVisits]) {
@@ -363,24 +366,139 @@ function step(s, dt, offline) {
   // الأحداث
   if (s.event && s.time >= s.event.until) s.event = null;
   if (!s.event && s.time >= s.nextEventAt) {
-    const ev = pick(EVENTS);
+    const ev = pick(EVENTS.filter(e => !e.mods.raid || s.time > GAME.FIRST_RAID_AT));
     s.event = { id: ev.id, until: s.time + 1 };
     s.nextEventAt = s.time + rand(1.8, 3.2);
+    if (ev.mods.raid) s.nextRaidAt = Math.min(s.nextRaidAt, s.time + rand(0.05, 0.4));
     Bus.notify(`${ev.icon} ${ev.name}: ${ev.desc}`, 'event');
   }
 }
 
+function removeAnimal(s, a) {
+  s.animals = s.animals.filter(x => x !== a);
+  s.vetVisits = s.vetVisits.filter(v => v.animalId !== a.id);
+}
+
+// اختيار عشوائي موزون من [[مفتاح, {weight}], ...]
+function pickWeighted(options) {
+  let r = Math.random() * options.reduce((t, [, o]) => t + o.weight, 0);
+  for (const [k, o] of options) { r -= o.weight; if (r <= 0) return k; }
+  return options[0][0];
+}
+
 function infect(s, a) {
-  const options = Object.entries(DISEASES).filter(([id, D]) =>
-    (!D.only || D.only.includes(a.type)) && (!D.not || !D.not.includes(a.type)));
-  const total = options.reduce((t, [, D]) => t + D.weight, 0);
-  let r = Math.random() * total;
-  let chosen = options[0][0];
-  for (const [id, D] of options) { r -= D.weight; if (r <= 0) { chosen = id; break; } }
+  const chosen = pickWeighted(Object.entries(DISEASES).filter(([id, D]) =>
+    (!D.only || D.only.includes(a.type)) && (!D.not || !D.not.includes(a.type))));
   a.disease = { id: chosen, severity: 1, prog: 0, diagnosed: false };
   Bus.notify(`🤒 ${ANIMALS[a.type].name} (${a.name}) ${gen(ANIMALS[a.type], 'مريض ويحتاج', 'مريضة وتحتاج')} طبيب!`, 'sick');
   Bus.fx('sick', a);
 }
+
+// ------------------------------------------------------------
+//  الحيوانات المفترسة
+//  مراحل الهجوم: approach (يقترب) ← fence (يكسر السياج) ← inside (يهاجم فريسة) ← flee (يهرب)
+// ------------------------------------------------------------
+function stepRaids(s, dt, offline, mods) {
+  if (offline) {
+    // لا هجمات أثناء إغلاق اللعبة: المفترس الموجود ينسحب
+    s.raids = [];
+    if (s.nextRaidAt < s.time) s.nextRaidAt = s.time + rand(0.3, 1);
+    return;
+  }
+  const dog = upVal(s, 'dog');
+  for (const r of [...s.raids]) {
+    const P = PREDATORS[r.type];
+    if (r.phase === 'flee') {
+      if (s.time >= r.until) s.raids = s.raids.filter(x => x !== r);
+      continue;
+    }
+    // الكلب يهاجم المفترس عندما يصل للسياج
+    if (dog && r.phase !== 'approach') {
+      r.hp -= dog * dt;
+      if (r.hp <= 0) { repel(s, r, 'dog'); continue; }
+    }
+    if (r.phase === 'approach') {
+      if (s.time < r.until) continue;
+      r.phase = 'fence';
+      r.until = s.time + upVal(s, 'fence') * P.fence;
+      Bus.notify(dog ? `🐕 الكلب ينبح! ${P.the} عند السياج` : `${P.icon} ${P.the} يحاول اختراق السياج!`, 'raid');
+    } else if (r.phase === 'fence') {
+      if (s.time < r.until) continue;
+      const a = pickPrey(s, P);
+      if (!a) { giveUp(s, r); continue; }
+      r.phase = 'inside';
+      r.targetId = a.id;
+      r.biteAt = s.time + GAME.RAID_BITE_DELAY;
+      Bus.notify(`🚨 ${P.the} دخل الحظيرة ويطارد ${ANIMALS[a.type].name} (${a.name})!`, 'raid');
+    } else if (r.phase === 'inside') {
+      let a = s.animals.find(x => x.id === r.targetId);
+      if (!a) {
+        a = pickPrey(s, P);
+        if (!a) { giveUp(s, r); continue; }
+        r.targetId = a.id;
+        r.biteAt = s.time + GAME.RAID_BITE_DELAY;
+      }
+      if (s.time < r.biteAt) continue;
+      a.health -= P.bite * (dog ? GAME.DOG_BITE_MULT : 1) * dt;
+      if (a.health <= 0) {
+        removeAnimal(s, a);
+        s.stats.died++;
+        s.stats.eaten++;
+        const T = ANIMALS[a.type];
+        Bus.notify(`💀 ${P.the} افترس ${T.name} (${a.name})! قوِّ دفاعاتك`, 'dead');
+        Bus.fx('death', a);
+        r.phase = 'flee';
+        r.until = s.time + GAME.RAID_FLEE;
+      }
+    }
+  }
+
+  if (!s.raids.length && s.time >= s.nextRaidAt && isNight(s) && s.animals.length) {
+    spawnRaid(s);
+    s.nextRaidAt = s.time + rand(1, 2) / (upVal(s, 'lights') * mods.raid);
+  }
+}
+
+function spawnRaid(s) {
+  const options = Object.entries(PREDATORS).filter(([, P]) => P.level <= s.level);
+  const n = s.level >= 6 && Math.random() < 0.3 ? 2 : 1;
+  for (let i = 0; i < n; i++) {
+    const type = pickWeighted(options);
+    const P = PREDATORS[type];
+    s.raids.push({ id: s.nextId++, type, phase: 'approach', hp: P.hp, until: s.time + GAME.RAID_APPROACH * (1 + i * 0.3), targetId: null, biteAt: 0, seed: Math.random() });
+    Bus.notify(`${P.icon} ${P.name} يقترب من الحظيرة! المسه بسرعة لطرده`, 'raid');
+  }
+  Bus.fx('raid');
+}
+
+// الفريسة: الصغار والدجاج أولاً، ومن الأنواع المفضلة للمفترس
+function pickPrey(s, P) {
+  const max = STAGES.indexOf(P.maxStage);
+  const weak = s.animals.filter(a => a.type === 'chicken' || STAGES.indexOf(a.stage) <= max);
+  const fav = weak.filter(a => !P.prey || P.prey.includes(a.type));
+  const list = fav.length ? fav : weak;
+  return list.length ? pick(list) : null;
+}
+
+function repel(s, r, by) {
+  const P = PREDATORS[r.type];
+  r.phase = 'flee';
+  r.until = s.time + GAME.RAID_FLEE;
+  r.hp = 0;
+  s.stats.repelled++;
+  earn(s, P.bounty);
+  Bus.notify(by === 'dog' ? `🐕 كلب الحراسة طرد ${P.the}! +${P.bounty}💰` : `✅ طردت ${P.the}! +${P.bounty}💰`, 'good');
+  Bus.fx('repel', r);
+}
+
+function giveUp(s, r) {
+  const P = PREDATORS[r.type];
+  r.phase = 'flee';
+  r.until = s.time + GAME.RAID_FLEE;
+  Bus.notify(`${P.icon} ${P.the} لم يجد فريسة سهلة وانسحب`, 'info');
+}
+
+function activeRaids(s) { return s.raids.filter(r => r.phase !== 'flee'); }
 
 // ------------------------------------------------------------
 //  توليد الطلبات
@@ -690,6 +808,29 @@ function actShipDeliver(idx) {
   earn(S, total);
   Bus.fx('money', { amount: total, at: 'dock' });
   return done(msg);
+}
+
+// لمس المفترس لطرده
+function actHitPredator(id) {
+  const r = S.raids.find(x => x.id === id);
+  if (!r || r.phase === 'flee') return fail('');
+  r.hp -= 1;
+  Bus.fx('hit', r);
+  if (r.hp <= 0) repel(S, r, 'you');
+  return done('');
+}
+
+function actFirecracker() {
+  const list = activeRaids(S);
+  if (!list.length) return fail('لا يوجد حيوان مفترس الآن');
+  if (S.money < GAME.FIRECRACKER_COST) return fail('لا يوجد مال كافٍ');
+  S.money -= GAME.FIRECRACKER_COST;
+  Bus.fx('firecracker', list);
+  for (const r of list) {
+    r.hp -= GAME.FIRECRACKER_DMG;
+    if (r.hp <= 0) repel(S, r, 'you');
+  }
+  return done('🧨 فرقعت المفرقعات!');
 }
 
 function actUpgrade(key) {
