@@ -19,6 +19,13 @@ const GAME = {
   HUNGER_PER_DAY: 100,
   FIRST_SHIP_AT: 1.5,
   FIRST_EVENT_AT: 2.2,
+  FIRST_RAID_AT: 2.8,        // أول هجوم لحيوان مفترس (ليلة اليوم الثالث)
+  RAID_APPROACH: 0.042,      // وقت اقتراب المفترس من السياج (~10 ثواني)
+  RAID_BITE_DELAY: 0.008,    // وقت وصوله للفريسة بعد دخول الحظيرة
+  RAID_FLEE: 0.017,          // وقت هروبه خارج المزرعة
+  DOG_BITE_MULT: 0.6,        // وجود الكلب يشتّت المفترس ويقلل ضرره
+  FIRECRACKER_COST: 30,
+  FIRECRACKER_DMG: 5,
   HELI_FIRST_DELAY: 0.25,    // أول هليكوبتر بعد بناء المهبط (~دقيقة)
   HELI_STAY: 0.4,            // مدة انتظار الهليكوبتر على المهبط (~1.5 دقيقة)
 };
@@ -126,6 +133,35 @@ const DISEASES = {
 const SEVERITY_NAMES = ['', 'خفيف', 'متوسط', 'شديد'];
 
 // ------------------------------------------------------------
+//  الحيوانات المفترسة — تهاجم ليلاً
+//  hp: عدد اللمسات لطرده | bite: ضرر الصحة لكل يوم على الفريسة
+//  fence: مضاعف وقت كسر السياج | prey: فرائسه المفضلة (null = أي حيوان)
+//  maxStage: أكبر عمر يستطيع افتراسه (الدجاج فريسة دائماً) | bounty: مكافأة طرده
+// ------------------------------------------------------------
+const PREDATORS = {
+  fox: {
+    name: 'ثعلب', the: 'الثعلب', icon: '🦊', level: 1, weight: 5, hp: 8, bite: 2000, fence: 1.2, bounty: 20,
+    prey: ['chicken', 'sheep', 'goat'], maxStage: 'small', size: 0.85,
+    look: { kind: 'quad', rx: 17, ry: 9, lh: 10, lw: 3, body: '#d8712d', head: '#d8712d', muzzle: '#f4e7d7',
+      leg: '#4a2a1a', hoof: '#2a1a10', ear: '#9c4a18' },
+  },
+  wolf: {
+    name: 'ذئب', the: 'الذئب', icon: '🐺', level: 3, weight: 4, hp: 15, bite: 2400, fence: 0.9, bounty: 50,
+    prey: ['sheep', 'goat', 'chicken'], maxStage: 'medium', size: 1,
+    look: { kind: 'quad', rx: 22, ry: 11, lh: 14, lw: 4, body: '#7d7f86', head: '#7d7f86', muzzle: '#cfcfcf',
+      leg: '#5f6168', hoof: '#2e2f33', ear: '#4f5158' },
+  },
+  hyena: {
+    name: 'ضبع', the: 'الضبع', icon: '🐾', level: 5, weight: 2, hp: 25, bite: 3000, fence: 0.7, bounty: 90,
+    prey: null, maxStage: 'large', size: 1.05,
+    look: { kind: 'quad', rx: 22, ry: 12, lh: 15, lw: 4.5, body: '#b99a6a', spots: '#5b4630', head: '#9c7f55',
+      muzzle: '#4a3a2a', leg: '#8a6f48', hoof: '#2e2418', ear: '#6b5436' },
+  },
+};
+const DOG_LOOK = { kind: 'quad', rx: 17, ry: 10, lh: 12, lw: 3.5, body: '#c8a06a', spots: '#6b4a2d', head: '#c8a06a',
+  muzzle: '#e9d6b8', leg: '#b28a58', hoof: '#3a2a1a', ear: '#6b4a2d' };
+
+// ------------------------------------------------------------
 //  التطويرات — levels[0] هي البداية
 // ------------------------------------------------------------
 const UPGRADES = {
@@ -164,6 +200,21 @@ const UPGRADES = {
     levels: [{ v: 3, bonus: 0 }, { v: 2.5, bonus: 0.1, cost: 600 }, { v: 2, bonus: 0.2, cost: 1500 }],
     fmt: (v, l) => `كل ${v} يوم · +${Math.round(l.bonus * 100)}% مكافأة`,
   },
+  fence: {
+    name: 'السياج', icon: '🚧', desc: 'يؤخّر الحيوانات المفترسة قبل أن تدخل الحظيرة',
+    levels: [{ v: 0.0125 }, { v: 0.035, cost: 350 }, { v: 0.065, cost: 900 }, { v: 0.11, cost: 2000 }],
+    fmt: v => `يصمد ~${Math.round(v * GAME.DAY_MS / 1000)} ثانية`,
+  },
+  dog: {
+    name: 'كلب الحراسة', icon: '🐕', desc: 'ينبح ويهاجم المفترس تلقائياً ويشتّته عن الفريسة',
+    levels: [{ v: 0 }, { v: 150, cost: 450, label: 'كلب حراسة' }, { v: 270, cost: 1100, label: 'كلب مدرّب' }, { v: 440, cost: 2400, label: 'كلبا حراسة' }],
+    fmt: (v, l) => (v ? l.label : 'لا يوجد'),
+  },
+  lights: {
+    name: 'الإنارة الليلية', icon: '💡', desc: 'كشافات حول الحظيرة تُبعد المفترسات',
+    levels: [{ v: 1 }, { v: 0.7, cost: 400 }, { v: 0.45, cost: 1200 }],
+    fmt: v => (v >= 1 ? 'لا توجد' : `-${Math.round((1 - v) * 100)}% هجمات`),
+  },
   helipad: {
     name: 'مهبط الهليكوبتر', icon: '🚁', desc: 'هليكوبتر تشتري طلبات صغيرة عاجلة بأعلى الأسعار',
     levels: [{ v: 0, bonus: 0 }, { v: 1.5, bonus: 0, cost: 1200 }, { v: 1.2, bonus: 0.15, cost: 2600 }, { v: 0.9, bonus: 0.3, cost: 5000 }],
@@ -182,6 +233,7 @@ const EVENTS = [
   { id: 'festival', icon: '🎉', name: 'موسم العيد', desc: 'مشترون أكثر ويدفعون أعلى', mods: { buyerPrice: 1.2, buyerRate: 1.8 } },
   { id: 'feedPrice', icon: '📈', name: 'غلاء العلف', desc: 'سعر العلف في السوق مضاعف', mods: { feedPrice: 2 } },
   { id: 'calm', icon: '🍃', name: 'جو معتدل', desc: 'الحيوانات أقل عرضة للمرض اليوم', mods: { disease: 0.5 } },
+  { id: 'wolves', icon: '🐺', name: 'موسم الذئاب', desc: 'المفترسات تهاجم أكثر — احمِ الحظيرة!', mods: { raid: 2.5 } },
 ];
 
 const BUYER_NAMES = ['أبو علي', 'حجي كريم', 'أم محمد', 'سالم', 'أبو حسين', 'جاسم', 'أم زينب', 'حمزة', 'أبو مصطفى', 'عباس', 'ستار', 'أبو يوسف', 'نوري', 'حيدر', 'أم عباس'];

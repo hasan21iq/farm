@@ -19,6 +19,7 @@ function catchUp(elapsedMs) {
 function handleWorldTap(x, y) {
   const hit = hitTest(S, x, y);
   if (!hit) { if (UI.panel && UI.panel !== 'help') closePanel(); return; }
+  if (hit.kind === 'predator') { actHitPredator(hit.id); return; }
   if (hit.kind === 'animal') openPanel('animal', hit.id);
   else if (hit.kind === 'plot') runAction('plot', hit.index);
   else if (hit.kind === 'storage') openPanel('storage');

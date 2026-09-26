@@ -31,6 +31,9 @@ const Sfx = (() => {
     level: () => tone([523, 659, 784, 1047], 0.1, 'triangle', 0.1),
     alert: () => tone([880, 660], 0.1, 'sine', 0.07),
     error: () => tone([220], 0.12, 'square', 0.04),
+    howl: () => tone([392, 523, 587, 440], 0.22, 'sine', 0.09),
+    hit: () => tone([180, 120], 0.05, 'square', 0.06),
+    bang: () => tone([150, 90, 60], 0.08, 'sawtooth', 0.12),
   };
 })();
 
@@ -461,11 +464,14 @@ PANELS.menu = {
       <div><b>${st.helis}</b><small>طلب هليكوبتر</small></div>
       <div><b>${st.treated}</b><small>حالة علاج</small></div>
       <div><b>${st.died}</b><small>حيوان نافق</small></div>
+      <div><b>${st.repelled}</b><small>مفترس مطرود</small></div>
+      <div><b>${st.eaten}</b><small>ضحية مفترس</small></div>
       <div><b>${S.animals.length}</b><small>حيوان حالياً</small></div>
     </div>
     <div class="row-btns">
       ${btn(S.settings.sound ? '🔊 الصوت: يعمل' : '🔇 الصوت: مطفأ', 'sound')}
       ${btn('❓ طريقة اللعب', 'help')}
+      ${btn('🧪 اختبار: هجوم مفترس', 'testRaid', '', '', 'red')}
     </div>
     <h3>📜 آخر الأحداث</h3><div class="log">`;
     for (const l of S.log.slice(0, 40)) h += `<div class="log-item ${l.k}"><small>ي${l.d} ${l.h}</small> ${esc(l.m)}</div>`;
@@ -487,6 +493,7 @@ PANELS.help = {
         <li>🌾 <b>أطعم الحيوانات</b> بزر "إطعام الكل". الجوع يوقف النمو ويضر الصحة.</li>
         <li>🤒 <b>المرض:</b> عندما تظهر علامة المرض اطلب الطبيب ثم عالج الحيوان قبل أن ينفق.</li>
         <li>🧹 <b>النظافة والازدحام</b> يزيدان الأمراض — نظّف الحظيرة باستمرار.</li>
+        <li>🐺 <b>المفترسات</b> (ثعلب، ذئب، ضبع) تهاجم ليلاً! <b>المسها بسرعة</b> لطردها، أو استخدم 🧨 المفرقعات. طوّر السياج 🚧 واشترِ كلب حراسة 🐕 وركّب الإنارة 💡.</li>
         <li>🤝 <b>بع للمشترين</b> في ساحة البيع قبل أن يغادروا، وجهّز طلبات <b>السفينة ⛴️</b> الكبيرة، وابنِ <b>مهبط الهليكوبتر 🚁</b> لطلبات عاجلة بأعلى الأسعار.</li>
         <li>🔨 <b>طوّر</b> الحظيرة والحقول والمخزن وافتح حيوانات جديدة.</li>
         <li>🕐 يوم اللعبة = ${Math.round(GAME.DAY_MS / 60000)} دقائق. اللعبة تُحفظ تلقائياً وتعمل بدون إنترنت.</li>
@@ -502,7 +509,7 @@ PANELS.away = {
   render() {
     const d = UI.param || { days: 0, msgs: [] };
     let h = `<p>مرّ على المزرعة <b>${fmtReal(d.days)}</b> من وقت اللعب${d.capped ? ' (الحد الأقصى المحسوب)' : ''}.</p>
-      <p class="hint">أثناء الإغلاق لا تظهر أمراض جديدة ولا تنفق الحيوانات، لكنها تجوع وتكبر والمحاصيل تنمو.</p><div class="log">`;
+      <p class="hint">أثناء الإغلاق لا تظهر أمراض جديدة ولا تهاجم المفترسات ولا تنفق الحيوانات، لكنها تجوع وتكبر والمحاصيل تنمو.</p><div class="log">`;
     const msgs = d.msgs.slice(-25).reverse();
     for (const m of msgs) h += `<div class="log-item ${m.k}">${esc(m.m)}</div>`;
     if (!msgs.length) h += `<p class="empty">لم يحدث شيء مهم</p>`;
@@ -582,6 +589,15 @@ const ACTIONS = {
   deliver: i => actShipDeliver(+i),
   sellHeli: () => actSellHeli(),
   upgrade: k => actUpgrade(k),
+  firecracker: () => actFirecracker(),
+  // زر اختبار: يستدعي مفترساً فوراً بدون انتظار الليل
+  testRaid: () => {
+    if (!S.animals.length) return fail('لا توجد حيوانات ليهاجمها المفترس');
+    spawnRaid(S);
+    closePanel();
+    setTimeout(focusRaid, 50);
+    return 'nav';
+  },
   sound: () => { S.settings.sound = !S.settings.sound; },
   help: () => { openPanel('help'); return 'nav'; },
   closeHelp: () => { S.tutorialDone = true; closePanel(); return 'nav'; },
@@ -640,8 +656,8 @@ function logMsg(msg, kind) {
 function onNotify(msg, kind) {
   logMsg(msg, kind);
   if (kind === 'day') return;
-  toast(msg, { good: 'good', level: 'gold', bad: 'bad', dead: 'bad', sick: 'bad', event: 'gold', ship: 'blue', buyer: 'blue', vet: 'blue' }[kind] || 'info');
-  if (['sick', 'bad', 'ship', 'buyer', 'event'].includes(kind)) Sfx.alert();
+  toast(msg, { good: 'good', level: 'gold', bad: 'bad', dead: 'bad', sick: 'bad', raid: 'bad', event: 'gold', ship: 'blue', buyer: 'blue', vet: 'blue' }[kind] || 'info');
+  if (['sick', 'bad', 'ship', 'buyer', 'event', 'raid'].includes(kind)) Sfx.alert();
 }
 
 function updateHud() {
@@ -659,6 +675,7 @@ function updateHud() {
     evEl.title = ev.desc;
     evEl.classList.add('show');
   } else evEl.classList.remove('show');
+  updateRaidAlert();
 
   // شارات الأزرار
   const sick = S.animals.filter(a => a.disease).length;
@@ -678,6 +695,27 @@ function updateHud() {
   qf.classList.toggle('pulse', hungry > 0);
   qf.querySelector('.badge').textContent = hungry || '';
   qf.querySelector('.badge').style.display = hungry ? '' : 'none';
+}
+
+// تنبيه الهجوم: المس النص للانتقال إلى المفترس
+const RAID_PHASE_TEXT = { approach: 'يقترب من الحظيرة', fence: 'عند السياج!', inside: 'داخل الحظيرة!' };
+function updateRaidAlert() {
+  const el = $('#raid');
+  const r = activeRaids(S)[0];
+  el.classList.toggle('show', !!r);
+  if (!r) return;
+  const P = PREDATORS[r.type];
+  el.querySelector('.txt').textContent = `${P.icon} ${P.name} ${RAID_PHASE_TEXT[r.phase]} المسه لطرده 👆`;
+  el.querySelector('.fc b').textContent = GAME.FIRECRACKER_COST;
+  el.querySelector('.fc').disabled = S.money < GAME.FIRECRACKER_COST;
+}
+
+function focusRaid() {
+  const r = activeRaids(S)[0];
+  const p = r && View.preds.get(r.id);
+  if (!p) return;
+  closePanel();
+  focusOn(Math.max(p.x, View.w / 2 / View.cam.zoom - 60), p.y);
 }
 
 function setBadge(panel, val, color) {
@@ -704,6 +742,9 @@ function initUI() {
   $('#hud-money').parentElement.addEventListener('click', () => openPanel('upgrades'));
   $('#hud-feed').parentElement.addEventListener('click', () => openPanel('storage'));
   $('#quick-feed').addEventListener('click', () => runAction('feedAll'));
+  $('#raid').addEventListener('click', e => {
+    if (e.target.closest('.fc')) runAction('firecracker'); else focusRaid();
+  });
   const body = $('#sheet-body');
   body.addEventListener('pointerdown', () => { UI.pressing = true; });
   window.addEventListener('pointerup', () => { UI.pressing = false; });
