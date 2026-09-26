@@ -30,19 +30,20 @@ function newGame() {
     nextId: 1,
     feed: { grass: 20, barley: 10, corn: 0, alfalfa: 0 },
     plots: [],
-    upgrades: { barn: 0, fields: 0, storage: 0, saleyard: 0, clinic: 0, feeder: 0, dock: 0, fence: 0, dog: 0, lights: 0 },
+    upgrades: { barn: 0, fields: 0, storage: 0, saleyard: 0, clinic: 0, feeder: 0, dock: 0, fence: 0, dog: 0, lights: 0, helipad: 0 },
     unlocked: { cow: true, sheep: true },
     cleanliness: 100,
     buyers: [],
     nextBuyerAt: GAME.START_HOUR / 24 + 0.04,
     ship: { state: 'away', nextAt: GAME.FIRST_SHIP_AT, leaveAt: 0, lines: [], bonus: 0 },
+    heli: { state: 'away', nextAt: 0, arrivedAt: 0, leaveAt: 0, leftAt: -1, lines: [] },
     vetVisits: [],
     event: null,
     nextEventAt: GAME.FIRST_EVENT_AT,
     raids: [],
     nextRaidAt: GAME.FIRST_RAID_AT,
     log: [],
-    stats: { sold: 0, earned: 0, died: 0, ships: 0, buyers: 0, treated: 0, repelled: 0, eaten: 0 },
+    stats: { sold: 0, earned: 0, died: 0, ships: 0, helis: 0, buyers: 0, treated: 0, repelled: 0, eaten: 0 },
     settings: { sound: true },
     tutorialDone: false,
   };
@@ -363,6 +364,17 @@ function step(s, dt, offline) {
     Bus.notify('⛴️ أبحرت السفينة. ستعود لاحقاً بطلب جديد', 'info');
   }
 
+  // الهليكوبتر (بعد بناء المهبط)
+  const hl = s.heli;
+  if (upVal(s, 'helipad') > 0) {
+    if (hl.state === 'away' && s.time >= hl.nextAt) {
+      heliArrive(s);
+    } else if (hl.state === 'landed' && s.time >= hl.leaveAt) {
+      heliLeave(s);
+      Bus.notify('🚁 أقلعت الهليكوبتر بدون طلبها. ستعود لاحقاً', 'info');
+    }
+  }
+
   // الأحداث
   if (s.event && s.time >= s.event.until) s.event = null;
   if (!s.event && s.time >= s.nextEventAt) {
@@ -561,6 +573,29 @@ function shipArrive(s) {
   sh.bonus = Math.round((100 + 80 * lvl) * (1 + upLevel(s, 'dock').bonus));
   Bus.notify(`⛴️ وصلت السفينة وتطلب: ${linesText(sh.lines)}`, 'ship');
   Bus.fx('ship');
+}
+
+// طلب صغير وعاجل بسعر مرتفع — يجب تسليمه كاملاً دفعة واحدة
+function heliArrive(s) {
+  const hl = s.heli;
+  hl.state = 'landed';
+  hl.arrivedAt = s.time;
+  hl.leaveAt = s.time + GAME.HELI_STAY;
+  hl.lines = genLines(s, Math.random() < 0.35 ? 2 : 1,
+    () => randInt(1, 2),
+    () => (Math.random() < 0.7 ? 'large' : 'medium'));
+  const mult = rand(1.6, 1.9) * (1 + upLevel(s, 'helipad').bonus);
+  for (const l of hl.lines) l.price = Math.round(ANIMALS[l.type].stages[l.stage].sell * mult);
+  Bus.notify(`🚁 هبطت الهليكوبتر وتطلب بسرعة: ${linesText(hl.lines)}`, 'ship');
+  Bus.fx('heli');
+}
+
+function heliLeave(s) {
+  const hl = s.heli;
+  hl.state = 'away';
+  hl.lines = [];
+  hl.leftAt = s.time;
+  hl.nextAt = s.time + upVal(s, 'helipad') * rand(0.85, 1.15);
 }
 
 // "بقرة كبيرة" / "خروف متوسط" حسب جنس الاسم
@@ -833,6 +868,19 @@ function actFirecracker() {
   return done('🧨 فرقعت المفرقعات!');
 }
 
+function actSellHeli() {
+  const hl = S.heli;
+  if (hl.state !== 'landed') return fail('الهليكوبتر غير موجودة');
+  if (!canFulfill(S, hl.lines)) return fail('لا تملك كل الحيوانات المطلوبة (سليمة وبالعمر المطلوب)');
+  let total = 0;
+  for (const l of hl.lines) { takeAnimals(S, l.type, l.stage, l.count); total += l.price * l.count; S.stats.sold += l.count; }
+  S.stats.helis++;
+  heliLeave(S);
+  earn(S, total);
+  Bus.fx('money', { amount: total, at: 'helipad' });
+  return done(`🚁 بعت للهليكوبتر بـ ${total}`);
+}
+
 function actUpgrade(key) {
   const U = UPGRADES[key];
   const lvl = S.upgrades[key];
@@ -842,6 +890,7 @@ function actUpgrade(key) {
   S.money -= cost;
   S.upgrades[key]++;
   if (key === 'fields') syncPlots(S);
+  if (key === 'helipad' && S.upgrades.helipad === 1) S.heli.nextAt = S.time + GAME.HELI_FIRST_DELAY;
   addXp(S, Math.round(cost / 25));
   Bus.fx('upgrade', key);
   return done(`🔨 تم تطوير ${U.name}`);

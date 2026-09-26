@@ -136,6 +136,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 #bottombar button small { font-size: 10.5px; font-weight: bold; white-space: nowrap; }
 #bottombar button:active { transform: translateY(2px); box-shadow: 0 1px 0 #5d3b1f; }
 #bottombar button.on { background: #ffe38a; }
+@media (max-width: 400px) { #bottombar button small { font-size: 9px; } #bottombar button span { font-size: 20px; } }
 .badge {
   position: absolute; top: -5px; right: -3px; min-width: 20px; height: 20px; padding: 0 5px;
   border-radius: 10px; font-size: 12px; font-weight: bold; font-style: normal;
@@ -288,6 +289,7 @@ table.stats td .bar { display: inline-block; width: 60%; vertical-align: middle;
 /* الطلبات */
 .order { background: #fff; border: 2px solid #eadbb5; border-radius: 14px; padding: 10px; margin-bottom: 10px; }
 .order.ship { border-color: #9cc4ec; background: #f3f8ff; }
+.order.heli { border-color: #e7a79c; background: #fff5f2; }
 .order-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .order-head small { color: var(--muted); }
 .req { display: flex; align-items: center; gap: 8px; padding: 6px 4px; font-size: 14px; border-radius: 10px; margin-top: 4px; background: #fbf4e2; }

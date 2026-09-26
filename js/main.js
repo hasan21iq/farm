@@ -27,6 +27,7 @@ function handleWorldTap(x, y) {
   else if (hit.kind === 'animals') openPanel('animals');
   else if (hit.kind === 'sale') openPanel('sale');
   else if (hit.kind === 'ship') openPanel('ship');
+  else if (hit.kind === 'heli') openPanel('heli');
 }
 
 let lastFrame = performance.now();

@@ -349,6 +349,40 @@ PANELS.ship = {
 };
 
 // ------------------------------------------------------------
+//  الهليكوبتر
+// ------------------------------------------------------------
+PANELS.heli = {
+  title: () => '🚁 مهبط الهليكوبتر',
+  render() {
+    const hl = S.heli;
+    if (!S.upgrades.helipad) {
+      const cost = UPGRADES.helipad.levels[1].cost;
+      return `<div class="ship-away"><span class="huge">🚁</span>
+        <p>لا يوجد مهبط في مزرعتك بعد.</p></div>
+        <p class="hint">ابنِ مهبط الهليكوبتر لتصلك طلبات صغيرة وعاجلة من مشترين كبار يدفعون أعلى الأسعار (حتى ضعف القيمة تقريباً).</p>
+        <div class="row-btns">${btn(`🔨 بناء المهبط (${money(cost)}💰)`, 'upgrade', 'helipad', '', 'gold wide', S.money < cost)}</div>`;
+    }
+    if (hl.state !== 'landed') {
+      return `<div class="ship-away"><span class="huge">☁️</span>
+        <p>الهليكوبتر في الجو.</p>
+        <div class="big-stat">${fmtReal(hl.nextAt - S.time)}</div><p>حتى هبوطها القادم</p></div>
+        <p class="hint">💡 طلبات الهليكوبتر صغيرة لكن وقتها قصير — يجب تسليم الطلب كاملاً دفعة واحدة قبل أن تقلع.</p>
+        <p class="hint">🔨 طوّر المهبط لتأتي الهليكوبتر أكثر وتدفع أعلى.</p>`;
+    }
+    const total = hl.lines.reduce((t, l) => t + l.price * l.count, 0);
+    const ok = canFulfill(S, hl.lines);
+    const left = clamp((hl.leaveAt - S.time) / (hl.leaveAt - hl.arrivedAt), 0, 1) * 100;
+    return `<div class="order heli">
+      <div class="order-head"><b>🚁 طلب عاجل</b><small>تقلع بعد ${fmtReal(hl.leaveAt - S.time)}</small></div>
+      ${bar(left, 'thin timer')}
+      ${linesHtml(hl.lines, false)}
+      <div class="row-btns">${btn(`بيع بـ ${money(total)}💰`, 'sellHeli', '', '', 'green', !ok)}</div>
+    </div>
+    <p class="hint">💡 الهليكوبتر تقبل فقط الحيوانات السليمة (غير مريضة وصحتها فوق 40%).</p>`;
+  },
+};
+
+// ------------------------------------------------------------
 //  الطبيب
 // ------------------------------------------------------------
 PANELS.vet = {
@@ -427,6 +461,7 @@ PANELS.menu = {
       <div><b>${st.sold}</b><small>حيوان مُباع</small></div>
       <div><b>${st.buyers}</b><small>مشترٍ راضٍ</small></div>
       <div><b>${st.ships}</b><small>سفينة مكتملة</small></div>
+      <div><b>${st.helis}</b><small>طلب هليكوبتر</small></div>
       <div><b>${st.treated}</b><small>حالة علاج</small></div>
       <div><b>${st.died}</b><small>حيوان نافق</small></div>
       <div><b>${st.repelled}</b><small>مفترس مطرود</small></div>
@@ -459,7 +494,7 @@ PANELS.help = {
         <li>🤒 <b>المرض:</b> عندما تظهر علامة المرض اطلب الطبيب ثم عالج الحيوان قبل أن ينفق.</li>
         <li>🧹 <b>النظافة والازدحام</b> يزيدان الأمراض — نظّف الحظيرة باستمرار.</li>
         <li>🐺 <b>المفترسات</b> (ثعلب، ذئب، ضبع) تهاجم ليلاً! <b>المسها بسرعة</b> لطردها، أو استخدم 🧨 المفرقعات. طوّر السياج 🚧 واشترِ كلب حراسة 🐕 وركّب الإنارة 💡.</li>
-        <li>🤝 <b>بع للمشترين</b> في ساحة البيع قبل أن يغادروا، وجهّز طلبات <b>السفينة ⛴️</b> الكبيرة.</li>
+        <li>🤝 <b>بع للمشترين</b> في ساحة البيع قبل أن يغادروا، وجهّز طلبات <b>السفينة ⛴️</b> الكبيرة، وابنِ <b>مهبط الهليكوبتر 🚁</b> لطلبات عاجلة بأعلى الأسعار.</li>
         <li>🔨 <b>طوّر</b> الحظيرة والحقول والمخزن وافتح حيوانات جديدة.</li>
         <li>🕐 يوم اللعبة = ${Math.round(GAME.DAY_MS / 60000)} دقائق. اللعبة تُحفظ تلقائياً وتعمل بدون إنترنت.</li>
         <li>👆 اسحب بإصبع لتتحرك في المزرعة، وبإصبعين للتكبير.</li>
@@ -552,6 +587,7 @@ const ACTIONS = {
   sellBuyer: id => actSellBuyer(+id),
   dismiss: id => actDismissBuyer(+id),
   deliver: i => actShipDeliver(+i),
+  sellHeli: () => actSellHeli(),
   upgrade: k => actUpgrade(k),
   firecracker: () => actFirecracker(),
   // زر اختبار: يستدعي مفترساً فوراً بدون انتظار الليل
@@ -651,6 +687,7 @@ function updateHud() {
   setBadge('storage', ft < 5 && S.animals.length ? '!' : 0, 'red');
   setBadge('sale', S.buyers.length, buyersOk ? 'green' : 'blue');
   setBadge('ship', S.ship.state === 'docked' ? '!' : 0, 'blue');
+  setBadge('heli', S.heli.state === 'landed' ? '!' : 0, canFulfill(S, S.heli.lines) ? 'green' : 'blue');
   setBadge('vet', sick, 'red');
   const canUp = Object.entries(UPGRADES).some(([k, U]) => U.levels[S.upgrades[k] + 1] && S.money >= U.levels[S.upgrades[k] + 1].cost);
   setBadge('upgrades', canUp ? '↑' : 0, 'gold');
