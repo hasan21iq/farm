@@ -19,6 +19,8 @@ const GAME = {
   HUNGER_PER_DAY: 100,
   FIRST_SHIP_AT: 1.5,
   FIRST_EVENT_AT: 2.2,
+  HELI_FIRST_DELAY: 0.25,    // أول هليكوبتر بعد بناء المهبط (~دقيقة)
+  HELI_STAY: 0.4,            // مدة انتظار الهليكوبتر على المهبط (~1.5 دقيقة)
 };
 
 const STAGES = ['small', 'medium', 'large'];
@@ -161,6 +163,11 @@ const UPGRADES = {
     name: 'الميناء', icon: '⚓', desc: 'السفن تأتي أسرع وتدفع أكثر',
     levels: [{ v: 3, bonus: 0 }, { v: 2.5, bonus: 0.1, cost: 600 }, { v: 2, bonus: 0.2, cost: 1500 }],
     fmt: (v, l) => `كل ${v} يوم · +${Math.round(l.bonus * 100)}% مكافأة`,
+  },
+  helipad: {
+    name: 'مهبط الهليكوبتر', icon: '🚁', desc: 'هليكوبتر تشتري طلبات صغيرة عاجلة بأعلى الأسعار',
+    levels: [{ v: 0, bonus: 0 }, { v: 1.5, bonus: 0, cost: 1200 }, { v: 1.2, bonus: 0.15, cost: 2600 }, { v: 0.9, bonus: 0.3, cost: 5000 }],
+    fmt: (v, l) => (v ? `كل ${v} يوم · +${Math.round(l.bonus * 100)}% سعر` : 'غير مبني'),
   },
 };
 

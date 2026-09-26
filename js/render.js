@@ -81,6 +81,7 @@ function layout(s) {
     saleyard: { x: 925, y: 215, w: 420, h: 250 },
     dock: { x: 560, y: 55, w: 46, h: 140 },
     shipPos: { x: 740, y: 110 },
+    helipad: { x: 1040, y: 512, w: 150, h: 136 },
   };
 }
 
@@ -142,6 +143,7 @@ function buildBackground(s) {
   c.moveTo(80, 730); c.lineTo(1350, 730);
   c.moveTo(583, 190); c.lineTo(870, 190);
   c.moveTo(870, 340); c.lineTo(925, 340);
+  if (s.upgrades.helipad) { c.moveTo(870, 580); c.lineTo(1040, 580); }
   c.stroke();
   c.strokeStyle = 'rgba(160,120,70,0.25)'; c.lineWidth = 2;
   for (let i = 0; i < 160; i++) {
@@ -191,15 +193,18 @@ function buildBackground(s) {
   c.strokeStyle = '#7d5634'; c.lineWidth = 2;
   for (let y = D.y + 10; y < D.y + D.h; y += 10) { c.beginPath(); c.moveTo(D.x, y); c.lineTo(D.x + D.w, y); c.stroke(); }
 
+  // مهبط الهليكوبتر
+  drawHelipad(c, L.helipad, s.upgrades.helipad > 0);
+
   // الأشجار على الأطراف
   const trees = [];
   for (let y = 240; y < 1000; y += 70) trees.push([35 + R() * 20, y + R() * 20]);
   for (let x = 120; x < 1380; x += 90) trees.push([x + R() * 30, 1025 + R() * 15]);
   for (let y = 520; y < 700; y += 80) trees.push([1370 - R() * 20, y]);
-  trees.push([1000, 560], [1080, 610], [1250, 540], [1300, 640], [930, 600]);
+  trees.push([985, 540], [1250, 540], [1300, 640], [930, 610]);
   trees.sort((a, b) => a[1] - b[1]).forEach(([x, y]) => tree(c, x, y, 0.8 + R() * 0.4, R));
   // صخور وشجيرات
-  const busy = [L.pen, L.saleyard, L.storage, L.clinic, { x: 80, y: 700, w: 1280, h: 60 }, { x: 80, y: 765, w: 690, h: 190 }, { x: 850, y: 180, w: 40, h: 820 }];
+  const busy = [L.pen, L.saleyard, L.storage, L.clinic, L.helipad, { x: 80, y: 700, w: 1280, h: 60 }, { x: 80, y: 765, w: 690, h: 190 }, { x: 850, y: 180, w: 40, h: 820 }];
   for (let i = 0; i < 40; i++) {
     const x = 60 + R() * 1300, y = 480 + R() * 520;
     if (!busy.some(r => inRect(x, y, r, 18))) bush(c, x, y, R);
@@ -243,6 +248,73 @@ function bush(c, x, y, R) {
 // ------------------------------------------------------------
 //  المباني
 // ------------------------------------------------------------
+function drawHelipad(c, r, built) {
+  const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+  if (!built) {
+    c.setLineDash([8, 7]);
+    ell(c, cx, cy, 62, 52); c.strokeStyle = 'rgba(80,80,80,0.45)'; c.lineWidth = 3; c.stroke();
+    c.setLineDash([]);
+    c.font = '26px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.globalAlpha = 0.6;
+    c.fillText('🔒', cx, cy - 6); c.globalAlpha = 1;
+    c.font = 'bold 13px Tahoma, sans-serif'; c.fillStyle = 'rgba(60,60,60,0.7)';
+    c.fillText('مهبط هليكوبتر', cx, cy + 22);
+    return;
+  }
+  shadow(c, cx + 4, cy + 6, 70, 58);
+  fillEll(c, cx, cy, 68, 57, '#6f7479');
+  fillEll(c, cx, cy, 62, 51, '#8a9096');
+  ell(c, cx, cy, 52, 42); c.strokeStyle = '#f5d04a'; c.lineWidth = 4; c.stroke();
+  // حرف H
+  c.fillStyle = '#ffffff';
+  c.fillRect(cx - 22, cy - 22, 9, 44); c.fillRect(cx + 13, cy - 22, 9, 44); c.fillRect(cx - 13, cy - 4, 26, 8);
+  // أضواء حول المهبط
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; fillEll(c, cx + Math.cos(a) * 65, cy + Math.sin(a) * 54, 3, 3, '#ffb13b'); }
+  // كم الريح
+  c.fillStyle = '#6b6b6b'; c.fillRect(r.x + r.w - 6, r.y - 18, 3, 40);
+  c.fillStyle = '#ff7a2f';
+  c.beginPath(); c.moveTo(r.x + r.w - 3, r.y - 18); c.lineTo(r.x + r.w + 22, r.y - 13); c.lineTo(r.x + r.w + 22, r.y - 8); c.lineTo(r.x + r.w - 3, r.y - 6); c.closePath(); c.fill();
+  c.fillStyle = '#ffffff'; c.fillRect(r.x + r.w + 6, r.y - 16, 5, 9);
+  sign(c, cx, r.y + r.h + 18, 'مهبط الهليكوبتر', '#46607a');
+}
+
+function drawHelicopter(c, x, y, t, lift) {
+  // lift: 0 = على الأرض، 1 = عالياً في السماء
+  const hover = lift > 0 ? Math.sin(t * 5) * 1.5 : 0;
+  const sy = y - lift * 260 + hover;
+  // الظل على المهبط يصغر كلما ارتفعت
+  shadow(c, x, y + 26, 60 * (1 - lift * 0.6), 14 * (1 - lift * 0.6));
+  c.save(); c.translate(x, sy);
+  // الذيل
+  c.fillStyle = '#c8453b';
+  c.beginPath(); c.moveTo(20, -18); c.lineTo(92, -26); c.lineTo(92, -18); c.lineTo(20, -6); c.closePath(); c.fill();
+  c.fillStyle = '#a3362e'; c.fillRect(86, -40, 8, 22);
+  // مروحة الذيل
+  const ta = t * 30;
+  c.strokeStyle = 'rgba(40,40,40,0.8)'; c.lineWidth = 3;
+  c.beginPath(); c.moveTo(90 + Math.cos(ta) * 12, -29 + Math.sin(ta) * 12); c.lineTo(90 - Math.cos(ta) * 12, -29 - Math.sin(ta) * 12); c.stroke();
+  // الزلاجات
+  c.strokeStyle = '#3b3f44'; c.lineWidth = 3.5; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(-42, 22); c.lineTo(34, 22); c.moveTo(-26, 6); c.lineTo(-30, 22); c.moveTo(16, 6); c.lineTo(20, 22); c.stroke();
+  // الجسم
+  fillEll(c, -6, -10, 40, 22, '#e0533d');
+  fillEll(c, -10, -18, 30, 10, 'rgba(255,255,255,0.18)');
+  // الزجاج
+  c.fillStyle = '#9fd3e8';
+  c.beginPath(); c.moveTo(-44, -12); c.quadraticCurveTo(-40, -30, -18, -30); c.lineTo(-18, -8); c.closePath(); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.5)'; c.fillRect(-32, -26, 6, 10);
+  c.fillStyle = '#b8e0f0'; c.fillRect(-10, -24, 16, 12);
+  c.fillStyle = '#fff'; c.font = 'bold 9px Tahoma'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('VIP', 20, -4);
+  // المروحة الرئيسية
+  c.fillStyle = '#3b3f44'; c.fillRect(-10, -38, 8, 8);
+  const spin = t * 22, len = 78;
+  c.strokeStyle = 'rgba(50,50,50,0.85)'; c.lineWidth = 4;
+  for (let k = 0; k < 2; k++) {
+    const dx = Math.cos(spin + k * Math.PI / 2) * len;
+    c.beginPath(); c.moveTo(-6 - dx, -38); c.lineTo(-6 + dx, -38); c.stroke();
+  }
+  ell(c, -6, -38, len, 7); c.fillStyle = 'rgba(200,200,200,0.18)'; c.fill();
+  c.restore();
+}
 function drawBarn(c, r, night) {
   const x = r.x, y = r.y, w = r.w, h = r.h;
   shadow(c, x + w / 2 + 6, y + h + 2, w * 0.55, 10);
@@ -637,7 +709,8 @@ function handleFx(type, data) {
   const actorPos = a => { const act = View.actors.get(a.id); return act ? act : { x: L.pen.x + L.pen.w / 2, y: L.pen.y + L.pen.h / 2 }; };
   if (type === 'money') {
     const at = data.at === 'saleyard' ? { x: L.saleyard.x + 200, y: L.saleyard.y + 120 }
-      : data.at === 'dock' ? { x: L.shipPos.x, y: L.shipPos.y + 40 } : { x: L.pen.x + L.pen.w / 2, y: L.pen.y + 60 };
+      : data.at === 'dock' ? { x: L.shipPos.x, y: L.shipPos.y + 40 }
+      : data.at === 'helipad' ? { x: L.helipad.x + L.helipad.w / 2, y: L.helipad.y + 20 } : { x: L.pen.x + L.pen.w / 2, y: L.pen.y + 60 };
     floatText(at.x, at.y, `+${data.amount} 💰`);
     burst(at.x, at.y, 'coin', 12);
     Sfx.coin();
@@ -667,7 +740,7 @@ function renderFrame(s, dt) {
   View.t += dt;
   const t = View.t;
   const L = layout(s);
-  const key = `${s.upgrades.barn}-${s.upgrades.fields}`;
+  const key = `${s.upgrades.barn}-${s.upgrades.fields}-${s.upgrades.helipad > 0}`;
   if (View.bgKey !== key) { View.bg = buildBackground(s); View.bgKey = key; }
   const night = isNight(s);
   const hour = hourOf(s);
@@ -716,6 +789,15 @@ function renderFrame(s, dt) {
   // ترتيب العناصر حسب العمق
   const items = [];
   items.push({ y: L.barn.y + L.barn.h, draw: () => drawBarn(c, L.barn, night) });
+  const hl = s.heli, hp = L.helipad;
+  if (s.upgrades.helipad) {
+    // هبوط خلال أول ثوانٍ من الوصول، وإقلاع بعد المغادرة
+    const HD = 0.02;
+    let lift = null;
+    if (hl.state === 'landed') lift = clamp(1 - (s.time - hl.arrivedAt) / HD, 0, 1);
+    else if (hl.leftAt >= 0 && s.time - hl.leftAt < HD) lift = (s.time - hl.leftAt) / HD;
+    if (lift !== null) items.push({ y: hp.y + hp.h / 2 + 30, draw: () => drawHelicopter(c, hp.x + hp.w / 2, hp.y + hp.h / 2 - 4, t, lift) });
+  }
   for (const a of s.animals) {
     const act = View.actors.get(a.id);
     if (!act) continue;
@@ -770,6 +852,7 @@ function renderFrame(s, dt) {
     c.save(); c.translate(View.w / 2, View.h / 2); c.scale(z, z); c.translate(-View.cam.x, -View.cam.y);
     c.globalCompositeOperation = 'lighter';
     const lights = [[L.barn.x + L.barn.w / 2, L.barn.y + 22], [L.storage.x + 100, L.storage.y + 58], [L.clinic.x + 30, L.clinic.y + 48], [L.clinic.x + L.clinic.w - 30, L.clinic.y + 48], [L.saleyard.x + L.saleyard.w - 90, L.saleyard.y + 60]];
+    if (s.upgrades.helipad) lights.push([L.helipad.x + L.helipad.w / 2, L.helipad.y + L.helipad.h / 2]);
     for (const [lx, ly] of lights) {
       const gr = c.createRadialGradient(lx, ly, 2, lx, ly, 70);
       gr.addColorStop(0, `rgba(255,200,110,${dark * 0.7})`); gr.addColorStop(1, 'rgba(255,200,110,0)');
@@ -957,6 +1040,7 @@ function hitTest(s, x, y) {
   if (inRect(x, y, L.clinic, 10)) return { kind: 'vet' };
   if (inRect(x, y, L.barn, 6) || inRect(x, y, L.trough, 6)) return { kind: 'animals' };
   if (inRect(x, y, L.saleyard)) return { kind: 'sale' };
+  if (inRect(x, y, L.helipad, 10)) return { kind: 'heli' };
   if (inRect(x, y, L.dock, 10) || (y < 190 && Math.abs(x - L.shipPos.x) < 140 && s.ship.state === 'docked')) return { kind: 'ship' };
   if (inRect(x, y, L.pen)) return { kind: 'animals' };
   return null;
